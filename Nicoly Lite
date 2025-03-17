@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nicoly Lite</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/universal-sentence-encoder@latest"></script>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: 20px auto; }
+        .container { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+        input, textarea { width: 100%; padding: 8px; margin: 5px 0; }
+        button { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+        #resposta { background: #e9ecef; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h2>Nicoly Lite</h2>
+    
+    <div class="container">
+        <input type="text" id="pergunta" placeholder="Digite sua pergunta...">
+        <button onclick="enviarPergunta()">Enviar</button>
+        <div id="resposta">Carregando...</div>
+    </div>
+
+    <div class="container">
+        <h4>Adicionar Nova Resposta</h4>
+        <input type="text" id="novaPergunta" placeholder="Pergunta...">
+        <textarea id="novaResposta" placeholder="Resposta..."></textarea>
+        <button onclick="adicionarRegra()">Salvar</button>
+    </div>
+
+    <div class="container">
+        <h4>Adicionar Informação Personalizada (Texto Longo)</h4>
+        <textarea id="infoPersonalizada" placeholder="Escreva informações personalizadas para a Nicoly..."></textarea>
+        <button onclick="adicionarInformacao()">Salvar Informação</button>
+    </div>
+
+    <script>
+// ------------ [INICIALIZAÇÃO] ------------
+let encoder;
+const regras = JSON.parse(localStorage.getItem('regras')) || {
+    "oi": ["Olá! Como posso ajudar?", "Oi! Tudo bem?", "E aí, como vai?"],
+    "qual seu nome": ["Sou a Nicoly Lite!", "Me chamo Nicoly Lite!", "Pode me chamar de Nicoly!"],
+    "wiki": "(Modo Wikipedia ativado)"
+};
+const informacoesPersonalizadas = JSON.parse(localStorage.getItem('informacoesPersonalizadas')) || [];
+
+// ------------ [FUNÇÕES PRINCIPAIS] ------------
+async function loadModel() {
+    encoder = await use.load();
+    document.getElementById('resposta').innerText = "Pronta para conversar!";
+}
+
+async function buscarWikipedia(termo) {
+    try {
+        const response = await fetch(`https://pt.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts&titles=${encodeURIComponent(termo)}&exsentences=2&exlimit=1&explaintext=1`);
+        const data = await response.json();
+        const pagina = data.query.pages[Object.keys(data.query.pages)[0]];
+        return pagina.extract?.split(". ").slice(0, 2).join(". ") || "Não encontrei informações.";
+    } catch (e) {
+        return "Erro na busca.";
+    }
+}
+
+async function chamarDeepSeak(prompt) {
+    try {
+        const response = await fetch('https://SEU_PROJETO.glitch.me/chamarDeepSeak', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ prompt })
+        });
+        const data = await response.json();
+        return data.choices[0].message.content; // Retorna a resposta da API
+    } catch (e) {
+        return "Erro na busca.";
+    }
+}
+
+async function encontrarResposta(pergunta) {
+    // Verifica regras salvas
+    for (const [key, value] of Object.entries(regras)) {
+        if (pergunta.toLowerCase().includes(key)) {
+            return Array.isArray(value) ? value[Math.floor(Math.random() * value.length)] : value;
+        }
+    }
+
+    // Verifica informações personalizadas
+    for (const info of informacoesPersonalizadas) {
+        if (pergunta.toLowerCase().includes(info.texto)) return info.texto;
+    }
+
+    // Busca na DeepSeak se não encontrar
+    const respostaDeepSeak = await chamarDeepSeak(pergunta);
+    if (respostaDeepSeak !== "Erro na busca.") {
+        return respostaDeepSeak;
+    }
+
+    // Respostas padrão para perguntas comuns
+    if (pergunta.toLowerCase().includes("descobriu o brasil")) {
+        return "O Brasil foi descoberto pelos portugueses em 22 de abril de 1500, liderados por Pedro Álvares Cabral.";
+    }
+
+    return "Não entendi. Pode reformular?";
+}
+
+async function enviarPergunta() {
+    const pergunta = document.getElementById('pergunta').value;
+    const resposta = await encontrarResposta(pergunta);
+    
+    document.getElementById('resposta').innerText = resposta;
+    document.getElementById('pergunta').value = "";
+
+    // Salva histórico
+    const historico = JSON.parse(localStorage.getItem('historico') || "[]");
+    historico.push({ pergunta, resposta });
+    localStorage.setItem('historico', JSON.stringify(historico));
+}
+
+function adicionarRegra() {
+    const pergunta = document.getElementById('novaPergunta').value.toLowerCase();
+    const resposta = document.getElementById('novaResposta').value;
+
+    if (pergunta && resposta) {
+        regras[pergunta] = resposta.split(";"); // Permite múltiplas respostas
+        localStorage.setItem('regras', JSON.stringify(regras));
+        alert("Resposta salva!");
+    }
+}
+
+function adicionarInformacao() {
+    const info = document.getElementById('infoPersonalizada').value;
+    if (info) {
+        const [termo, resposta] = info.split(":");
+        informacoesPersonalizadas.push({ termo: termo.trim(), resposta: resposta.trim() });
+        localStorage.setItem('informacoesPersonalizadas', JSON.stringify(informacoesPersonalizadas));
+        alert("Informação salva!");
+    }
+}
+
+// Inicia o modelo
+loadModel();
+    </script>
+</body>
+</html>
